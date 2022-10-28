@@ -133,32 +133,19 @@ target_include_directories(${PROJECT_NAME}_lib SYSTEM PUBLIC
 ############
 # BINARIES #
 ############
-add_executable(nvblox_node
-  src/nvblox_node.cpp
-)
-
+# nvblox_node
+add_executable(nvblox_node src/nvblox_node.cpp)
 target_link_libraries(nvblox_node ${PROJECT_NAME}_lib)
-
-add_dependencies(nvblox_node
-  ${catkin_EXPORTED_TARGETS}
-)
-
+add_dependencies(nvblox_node ${catkin_EXPORTED_TARGETS})
 target_include_directories(nvblox_node SYSTEM PUBLIC
   ${catkin_INCLUDE_DIRS}
 )
 
-
-add_executable(3dmatch_node
-  src/3dmatch_node.cpp
-)
-
-target_link_libraries(3dmatch_node ${PROJECT_NAME}_lib)
-
-add_dependencies(3dmatch_node
-  ${catkin_EXPORTED_TARGETS}
-)
-
-target_include_directories(3dmatch_node SYSTEM PUBLIC
+# 3dmatch_node
+add_executable(nvblox_3dmatch_node src/3dmatch_node.cpp)
+target_link_libraries(nvblox_3dmatch_node ${PROJECT_NAME}_lib)
+add_dependencies(nvblox_3dmatch_node ${catkin_EXPORTED_TARGETS})
+target_include_directories(nvblox_3dmatch_node SYSTEM PUBLIC
   ${catkin_INCLUDE_DIRS}
 )
 
@@ -197,6 +184,6 @@ install(
 
 # Install nodes
 install(
-  TARGETS nvblox_node 3dmatch_node
+  TARGETS nvblox_node nvblox_3dmatch_node
   DESTINATION lib/${PROJECT_NAME}
 )

@@ -93,14 +93,14 @@ void Nvblox3DMatchNode::setupRos() {
       nodeHandle3D_.getNamespace() + "/time_between_frames",
       time_between_frames, 0.5);
 
-  // base_path_ = declare_parameter<std::string>("path", base_path_);
-
-  nodeHandle3D_.param<std::string>(nodeHandle3D_.getNamespace() + "/path",
+  nodeHandle3D_.param<std::string>(nodeHandle3D_.getNamespace() + "/base_path",
                                    base_path_, "");
 
   if (base_path_.empty()) {
     ROS_ERROR("No base path specified!");
     return;
+  } else {
+    ROS_INFO("Using base path: %s", base_path_.c_str());
   }
 
   // Mesh publishing
@@ -139,13 +139,13 @@ void Nvblox3DMatchNode::setupRos() {
   update_timer_ =
       nodeHandle3D_.createTimer(ros::Duration(time_between_frames),
                                 &Nvblox3DMatchNode::timerCallback, this);
-  /*
-  // Create a timer to load a new frame every n seconds.
-  update_timer_ =
-    create_wall_timer(
-    std::chrono::duration<float>(time_between_frames),
-    std::bind(&Nvblox3DMatchNode::timerCallback, this)); */
-}
+  // /*
+  // // Create a timer to load a new frame every n seconds.
+  // update_timer_ =
+  //   create_wall_timer(
+  //   std::chrono::duration<float>(time_between_frames),
+  //   std::bind(&Nvblox3DMatchNode::timerCallback, this)); */
+}  // namespace nvblox
 
 void Nvblox3DMatchNode::timerCallback(const ros::TimerEvent& /*event*/) {
   if (integrateFrame(frame_number_)) {
@@ -184,6 +184,7 @@ bool Nvblox3DMatchNode::integrateFrame(const int frame_number) {
           &depth_image)) {
     return false;
   }
+
   // Get the transform.
   Transform T_L_C;
   if (!datasets::threedmatch::internal::parsePoseFromFile(
@@ -259,16 +260,15 @@ bool Nvblox3DMatchNode::integrateFrame(const int frame_number) {
 
 int main(int argc, char** argv) {
   google::InitGoogleLogging(argv[0]);
-  FLAGS_alsologtostderr = true;
-  google::InstallFailureSignalHandler();
-  // ros::init(argc, argv);
+  // FLAGS_alsologtostderr = true;
+  // google::InstallFailureSignalHandler();
 
   ros::init(argc, argv, "nvblox_3dmatch_node");
   ros::NodeHandle nh("~");
+
   nvblox::Nvblox3DMatchNode Nvblox3DMatchNode(nh);
   ros::spin();
   // ros::spin(std::make_shared<nvblox::Nvblox3DMatchNode>());
-  std::cout << "Timings: " << nvblox::timing::Timing::Print();
-
+  std::cout << "Timings: " << nvblox::timing::Timing::Print() << std::endl;
   return EXIT_SUCCESS;
 }
