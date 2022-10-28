@@ -17,29 +17,29 @@
 
 // std libs
 
-// Jetson requires Jetpack 5.0 to have c++17 so libraries like filesystem cant be used now.
+// Jetson requires Jetpack 5.0 to have c++17 so libraries like filesystem cant
+// be used now.
 //#include <filesystem>
 
+#include <errno.h>
+#include <stdio.h>
+#include <sys/stat.h>
+#include <chrono>
+#include <condition_variable>
+#include <iostream>
 #include <limits>
 #include <memory>
 #include <string>
 #include <vector>
-#include <chrono>
-#include <condition_variable>
-#include <iostream>
-#include <sys/stat.h>
-#include <stdio.h>
-#include <errno.h>
 
 #include "nvblox_ros/conversions.hpp"
 
 using namespace std::chrono_literals;
 
-namespace nvblox
-{
+namespace nvblox {
 
-NvbloxNode::NvbloxNode(ros::NodeHandle& nodeHandle) : nodeHandle_(nodeHandle), transformer_(nodeHandle){
-  
+NvbloxNode::NvbloxNode(ros::NodeHandle& nodeHandle)
+    : nodeHandle_(nodeHandle), transformer_(nodeHandle) {
   if (!readParameters()) {
     ROS_ERROR("Error reading parameters for Nvblox. Program will exit.");
     return;
@@ -57,18 +57,18 @@ NvbloxNode::NvbloxNode(ros::NodeHandle& nodeHandle) : nodeHandle_(nodeHandle), t
 
   // Read mapping, integration related parameters.
   if (!readMappingParameters()) {
-    ROS_ERROR("Error reading mapping parameters for Nvblox. Program will exit.");
+    ROS_ERROR(
+        "Error reading mapping parameters for Nvblox. Program will exit.");
     return;
   }
 
   // Prematurely check correctness and existance of save path.
-  if(!manageSaveDirectory()){
+  if (!manageSaveDirectory()) {
     return;
   }
 
-  ROS_INFO_STREAM("Started up nvblox node in frame " <<
-      global_frame_ << " and voxel size " <<
-      voxel_size_);
+  ROS_INFO_STREAM("Started up nvblox node in frame "
+                  << global_frame_ << " and voxel size " << voxel_size_);
 
   // Set state.
   last_tsdf_update_time_ = ros::Time(0.0);
@@ -79,34 +79,36 @@ NvbloxNode::NvbloxNode(ros::NodeHandle& nodeHandle) : nodeHandle_(nodeHandle), t
   std::tie(freeMemoryAfterLastSave, std::ignore) = getFreeGPUMemory();
 }
 
-bool NvbloxNode::manageSaveDirectory(){
-
-  if(output_dir_.empty()){
+bool NvbloxNode::manageSaveDirectory() {
+  if (output_dir_.empty()) {
     // Get username
     std::string userName{getlogin()};
     ROS_INFO_STREAM("User name: " << userName);
     output_dir_ = "/home/" + userName + "/maps";
 
-    if(!doesDirectoryExist(output_dir_)){
-      if(makePath(output_dir_)){
+    if (!doesDirectoryExist(output_dir_)) {
+      if (makePath(output_dir_)) {
         ROS_INFO_STREAM("Created folder : " << output_dir_);
-      }else{
-        ROS_ERROR_STREAM("Could not create folder " << output_dir_ << " Exitting program.");
+      } else {
+        ROS_ERROR_STREAM("Could not create folder " << output_dir_
+                                                    << " Exitting program.");
         return false;
       }
     }
 
-    ROS_INFO_STREAM("Outputting results (as requested) to: (" << output_dir_ << ")");
+    ROS_INFO_STREAM("Outputting results (as requested) to: (" << output_dir_
+                                                              << ")");
 
-  }else{
+  } else {
     // Check if folder exists
-    if(!doesDirectoryExist(output_dir_)){
+    if (!doesDirectoryExist(output_dir_)) {
       // If does not exist create the folder recursively.
-      if(makePath(output_dir_)){
+      if (makePath(output_dir_)) {
         ROS_INFO_STREAM("Created folder : " << output_dir_);
-      }else{
+      } else {
         // Quit if the folder was not created.
-        ROS_ERROR_STREAM("Could not create folder " << output_dir_ << "Exitting program.");
+        ROS_ERROR_STREAM("Could not create folder " << output_dir_
+                                                    << "Exitting program.");
         return false;
       }
     }
@@ -117,64 +119,66 @@ bool NvbloxNode::manageSaveDirectory(){
   return true;
 }
 
-bool NvbloxNode::makePath(const std::string& path)
-{
+bool NvbloxNode::makePath(const std::string& path) {
   // C magic, read, write and execute rights.
   const mode_t mode{0777};
 
-  if (mkdir(path.c_str(), mode) == 0){
+  if (mkdir(path.c_str(), mode) == 0) {
     return true;
   }
 
   // if the deepest folder was not possible to create check parents.
-  switch (errno)
-  {
-  case ENOENT:
+  switch (errno) {
+    case ENOENT:
       // Parent didn't exist, try to create it
       {
-          std::size_t lastSlashPosition{path.find_last_of('/')};
-          if (lastSlashPosition == std::string::npos){
-            // If the slash is at the end, nothing to do.
-            return false;
-          }
-          // Get the path until the previous `/` and create that path.
-          if (!makePath(path.substr(0, lastSlashPosition) )){
-            return false;
-          }
+        std::size_t lastSlashPosition{path.find_last_of('/')};
+        if (lastSlashPosition == std::string::npos) {
+          // If the slash is at the end, nothing to do.
+          return false;
+        }
+        // Get the path until the previous `/` and create that path.
+        if (!makePath(path.substr(0, lastSlashPosition))) {
+          return false;
+        }
       }
       // now, try to create again
       return 0 == mkdir(path.c_str(), mode);
 
-  case EEXIST:
+    case EEXIST:
       // done!
       return doesDirectoryExist(path);
 
-  default:
+    default:
       return false;
   }
 }
 
-bool NvbloxNode::doesDirectoryExist(const std::string& path)
-{
+bool NvbloxNode::doesDirectoryExist(const std::string& path) {
   struct stat info;
 
-  if(stat(path.c_str(), &info ) != 0){
+  if (stat(path.c_str(), &info) != 0) {
     return false;
   }
 
   return (info.st_mode & S_IFDIR) != 0;
 }
 
-void NvbloxNode::setupRosCommunication(){
+void NvbloxNode::setupRosCommunication() {
   // Optional ways to provide transformations instead of TF.
-  transform_sub_ = nodeHandle_.subscribe("transform", 10, &NvbloxNode::transformCallback, this);
-  pose_sub_ = nodeHandle_.subscribe("pose", 10, &NvbloxNode::poseCallback, this);
+  transform_sub_ = nodeHandle_.subscribe("transform", 10,
+                                         &NvbloxNode::transformCallback, this);
+  pose_sub_ =
+      nodeHandle_.subscribe("pose", 10, &NvbloxNode::poseCallback, this);
 
   // A service to save the mesh as PLY.
-  save_ply_service_ = nodeHandle_.advertiseService("save_ply", &NvbloxNode::savePly, this);
+  save_ply_service_ =
+      nodeHandle_.advertiseService("save_ply", &NvbloxNode::savePly, this);
 
   // The timer for checking the avilable free memory in GPU.
-  memoryTimer_ = nodeHandle_.createTimer(ros::Duration(static_cast<double>(memoryCheckingPeriod_)), &NvbloxNode::memoryTimerCallback, this);
+  memoryTimer_ = nodeHandle_.createTimer(
+      ros::Duration(static_cast<double>(memoryCheckingPeriod_)),
+      &NvbloxNode::memoryTimerCallback, this);
 
   // Queue size is important, since we have to wait synced messages.
   constexpr int kQueueSize = 20;
@@ -192,92 +196,174 @@ void NvbloxNode::setupRosCommunication(){
   color_camera_info_sub1_.subscribe(nodeHandle_, camera_info_1_topic, 20);
 
   color_sub2_.subscribe(nodeHandle_, rgb_image_2_topic, 20);
-  color_camera_info_sub2_.subscribe(nodeHandle_,camera_info_2_topic, 20);
+  color_camera_info_sub2_.subscribe(nodeHandle_, camera_info_2_topic, 20);
 
   color_sub3_.subscribe(nodeHandle_, rgb_image_3_topic, 20);
   color_camera_info_sub3_.subscribe(nodeHandle_, camera_info_3_topic, 20);
 
   // All depth images are binded to the same callback.
-  depthSync1_ = std::make_unique<message_filters::Synchronizer<image_pair_sync_pol>>(image_pair_sync_pol(kQueueSize), depth_sub1_, depth_camera_info_sub1_);
-  depthSync1_->registerCallback(std::bind(&NvbloxNode::depthImageCallback, this, std::placeholders::_1, std::placeholders::_2));
+  depthSync1_ =
+      std::make_unique<message_filters::Synchronizer<image_pair_sync_pol>>(
+          image_pair_sync_pol(kQueueSize), depth_sub1_,
+          depth_camera_info_sub1_);
+  depthSync1_->registerCallback(std::bind(&NvbloxNode::depthImageCallback, this,
+                                          std::placeholders::_1,
+                                          std::placeholders::_2));
 
-  depthSync2_ = std::make_unique<message_filters::Synchronizer<image_pair_sync_pol>>(image_pair_sync_pol(kQueueSize), depth_sub2_, depth_camera_info_sub2_);
-  depthSync2_->registerCallback(std::bind(&NvbloxNode::depthImageCallback, this, std::placeholders::_1, std::placeholders::_2));
+  depthSync2_ =
+      std::make_unique<message_filters::Synchronizer<image_pair_sync_pol>>(
+          image_pair_sync_pol(kQueueSize), depth_sub2_,
+          depth_camera_info_sub2_);
+  depthSync2_->registerCallback(std::bind(&NvbloxNode::depthImageCallback, this,
+                                          std::placeholders::_1,
+                                          std::placeholders::_2));
 
-  depthSync3_ = std::make_unique<message_filters::Synchronizer<image_pair_sync_pol>>(image_pair_sync_pol(kQueueSize), depth_sub3_, depth_camera_info_sub3_);
-  depthSync3_->registerCallback(std::bind(&NvbloxNode::depthImageCallback, this, std::placeholders::_1, std::placeholders::_2));
+  depthSync3_ =
+      std::make_unique<message_filters::Synchronizer<image_pair_sync_pol>>(
+          image_pair_sync_pol(kQueueSize), depth_sub3_,
+          depth_camera_info_sub3_);
+  depthSync3_->registerCallback(std::bind(&NvbloxNode::depthImageCallback, this,
+                                          std::placeholders::_1,
+                                          std::placeholders::_2));
 
   // All rgb images are binded to the same callback.
-  rgbSync1_ = std::make_unique<message_filters::Synchronizer<image_pair_sync_pol>>(image_pair_sync_pol(kQueueSize), color_sub1_, color_camera_info_sub1_);
-  rgbSync1_->registerCallback(std::bind(&NvbloxNode::colorImageCallback, this, std::placeholders::_1, std::placeholders::_2));
+  rgbSync1_ =
+      std::make_unique<message_filters::Synchronizer<image_pair_sync_pol>>(
+          image_pair_sync_pol(kQueueSize), color_sub1_,
+          color_camera_info_sub1_);
+  rgbSync1_->registerCallback(std::bind(&NvbloxNode::colorImageCallback, this,
+                                        std::placeholders::_1,
+                                        std::placeholders::_2));
 
-  rgbSync2_ = std::make_unique<message_filters::Synchronizer<image_pair_sync_pol>>(image_pair_sync_pol(kQueueSize), color_sub2_, color_camera_info_sub2_);
-  rgbSync2_->registerCallback(std::bind(&NvbloxNode::colorImageCallback, this, std::placeholders::_1, std::placeholders::_2));
+  rgbSync2_ =
+      std::make_unique<message_filters::Synchronizer<image_pair_sync_pol>>(
+          image_pair_sync_pol(kQueueSize), color_sub2_,
+          color_camera_info_sub2_);
+  rgbSync2_->registerCallback(std::bind(&NvbloxNode::colorImageCallback, this,
+                                        std::placeholders::_1,
+                                        std::placeholders::_2));
 
-  rgbSync3_ = std::make_unique<message_filters::Synchronizer<image_pair_sync_pol>>(image_pair_sync_pol(kQueueSize), color_sub3_, color_camera_info_sub3_);
-  rgbSync3_->registerCallback(std::bind(&NvbloxNode::colorImageCallback, this, std::placeholders::_1, std::placeholders::_2));
+  rgbSync3_ =
+      std::make_unique<message_filters::Synchronizer<image_pair_sync_pol>>(
+          image_pair_sync_pol(kQueueSize), color_sub3_,
+          color_camera_info_sub3_);
+  rgbSync3_->registerCallback(std::bind(&NvbloxNode::colorImageCallback, this,
+                                        std::placeholders::_1,
+                                        std::placeholders::_2));
 
   // Publishers of Nvblox.
-  mesh_publisher_ = nodeHandle_.advertise<nvblox_msgs::Mesh>("mesh",1, true);
-  pointcloud_publisher_ = nodeHandle_.advertise<sensor_msgs::PointCloud2>("pointcloud",1,false);
-  map_slice_publisher_ = nodeHandle_.advertise<nvblox_msgs::DistanceMapSlice>("map_slice",1,false);
-
+  mesh_publisher_ = nodeHandle_.advertise<nvblox_msgs::Mesh>("mesh", 1, true);
+  pointcloud_publisher_ =
+      nodeHandle_.advertise<sensor_msgs::PointCloud2>("pointcloud", 1, false);
+  map_slice_publisher_ = nodeHandle_.advertise<nvblox_msgs::DistanceMapSlice>(
+      "map_slice", 1, false);
 }
 
-bool NvbloxNode::readMappingParameters(){
+bool NvbloxNode::readMappingParameters() {
   bool success{true};
   // Integrator settings.
+
+  // ************************** tsdf_integrator
   float max_integration_distance_m_local = 10.0f;
-  success &= nodeHandle_.param<float>("tsdf_integrator_max_integration_distance_m", max_integration_distance_m_local, 10.0f);
-  mapper_->tsdf_integrator().max_integration_distance_m(max_integration_distance_m_local);
-  
+  success &=
+      nodeHandle_.param<float>("tsdf_integrator_max_integration_distance_m",
+                               max_integration_distance_m_local, 10.0f);
+  mapper_->tsdf_integrator().max_integration_distance_m(
+      max_integration_distance_m_local);
+
   float truncation_distance_vox_local = 4.0f;
-  success &= nodeHandle_.param<float>("tsdf_integrator_truncation_distance_vox", truncation_distance_vox_local, 4.0f);
-  mapper_->tsdf_integrator().truncation_distance_vox(truncation_distance_vox_local);
+  success &= nodeHandle_.param<float>("tsdf_integrator_truncation_distance_vox",
+                                      truncation_distance_vox_local, 4.0f);
+  mapper_->tsdf_integrator().truncation_distance_vox(
+      truncation_distance_vox_local);
 
   float max_weight_local = 100.0f;
-  success &= nodeHandle_.param<float>("tsdf_integrator_max_weight", max_weight_local, 100.0f);
+  success &= nodeHandle_.param<float>("tsdf_integrator_max_weight",
+                                      max_weight_local, 100.0f);
   mapper_->tsdf_integrator().max_weight(max_weight_local);
 
-  success &= nodeHandle_.param<float>("mesh_integrator_min_weight", mapper_->mesh_integrator().min_weight(), 1e-4);
-  success &= nodeHandle_.param<bool>("mesh_integrator_weld_vertices", mapper_->mesh_integrator().weld_vertices(), false);
+  // ************************** mesh_integrator
+  float mesh_min_weight_local = mapper_->mesh_integrator().min_weight();
+  success &= nodeHandle_.param<float>("mesh_integrator_min_weight",
+                                      mesh_min_weight_local, 1e-4);
 
+  bool mesh_weld_vertices = mapper_->mesh_integrator().weld_vertices();
+  success &= nodeHandle_.param<bool>("mesh_integrator_weld_vertices",
+                                     mesh_weld_vertices, false);
+
+  // ************************** color_integrator
   float max_integration_distance_m_color_local = 10.0f;
-  success &= nodeHandle_.param<float>("color_integrator_max_integration_distance_m", max_integration_distance_m_color_local, 10.0f);
-  mapper_->color_integrator().max_integration_distance_m(max_integration_distance_m_color_local);
+  success &=
+      nodeHandle_.param<float>("color_integrator_max_integration_distance_m",
+                               max_integration_distance_m_color_local, 10.0f);
+  mapper_->color_integrator().max_integration_distance_m(
+      max_integration_distance_m_color_local);
 
-  success &= nodeHandle_.param<float>("esdf_integrator_min_weight", mapper_->esdf_integrator().min_weight(), 1e-4);
-  success &= nodeHandle_.param<float>("esdf_integrator_min_site_distance_vox", mapper_->esdf_integrator().min_site_distance_vox(), 1.0f);
-  success &= nodeHandle_.param<float>("esdf_integrator_max_distance_m", mapper_->esdf_integrator().max_distance_m(), 10.0f);
+  // ************************** esdf_integrator
+  float esdf_min_weight = mapper_->esdf_integrator().min_weight();
+  success &= nodeHandle_.param<float>("esdf_integrator_min_weight",
+                                      esdf_min_weight, 1e-4);
+
+  float max_site_distance_vox =
+      mapper_->esdf_integrator().max_site_distance_vox();
+  success &= nodeHandle_.param<float>("esdf_integrator_max_site_distance_vox",
+                                      max_site_distance_vox, 1.0f);
+
+  float esdf_max_distance_m = mapper_->esdf_integrator().max_distance_m();
+  success &= nodeHandle_.param<float>("esdf_integrator_max_distance_m",
+                                      esdf_max_distance_m, 10.0f);
+
   success &= nodeHandle_.param<std::string>("output_dir", output_dir_, "");
-  
+
   return success;
 }
 
-bool NvbloxNode::readParameters(){
+bool NvbloxNode::readParameters() {
   bool success{true};
   // Ros param reading.
   success &= nodeHandle_.param<float>("voxel_size", voxel_size_, 0.05f);
-  success &= nodeHandle_.param<std::string>("global_frame", global_frame_, "map"); 
+  success &=
+      nodeHandle_.param<std::string>("global_frame", global_frame_, "map");
   success &= nodeHandle_.param<std::string>("pose_frame", pose_frame_, "base");
-  success &= nodeHandle_.param<int>("memory_checking_period", memoryCheckingPeriod_, 5);
-  success &= nodeHandle_.param<bool>("use_helper_frame", useHelperFrame_, false);
-  success &= nodeHandle_.param<int>("memory_purge_threshold", memoryPurgeThreshold_, 750);
+  success &= nodeHandle_.param<int>("memory_checking_period",
+                                    memoryCheckingPeriod_, 5);
+  success &=
+      nodeHandle_.param<bool>("use_helper_frame", useHelperFrame_, false);
+  success &= nodeHandle_.param<int>("memory_purge_threshold",
+                                    memoryPurgeThreshold_, 750);
 
   // Depth camera topics
-  success &= nodeHandle_.param<std::string>("subscribers/depth_image_1_topic", depth_image_1_topic, "/point_cloud_colorizer_ros/depth_image_camera_1");
-  success &= nodeHandle_.param<std::string>("subscribers/depth_image_2_topic", depth_image_2_topic, "/point_cloud_colorizer_ros/depth_image_camera_2");
-  success &= nodeHandle_.param<std::string>("subscribers/depth_image_3_topic", depth_image_3_topic, "/point_cloud_colorizer_ros/depth_image_camera_3");
+  success &= nodeHandle_.param<std::string>(
+      "subscribers/depth_image_1_topic", depth_image_1_topic,
+      "/point_cloud_colorizer_ros/depth_image_camera_1");
+  success &= nodeHandle_.param<std::string>(
+      "subscribers/depth_image_2_topic", depth_image_2_topic,
+      "/point_cloud_colorizer_ros/depth_image_camera_2");
+  success &= nodeHandle_.param<std::string>(
+      "subscribers/depth_image_3_topic", depth_image_3_topic,
+      "/point_cloud_colorizer_ros/depth_image_camera_3");
 
   // RBG camera topics
-  success &= nodeHandle_.param<std::string>("subscribers/rgb_image_1_topic", rgb_image_1_topic, "/alphasense_driver_ros/cam3/dropped/debayered/slow");
-  success &= nodeHandle_.param<std::string>("subscribers/rgb_image_2_topic", rgb_image_2_topic, "/alphasense_driver_ros/cam4/dropped/debayered/slow");
-  success &= nodeHandle_.param<std::string>("subscribers/rgb_image_3_topic", rgb_image_3_topic, "/alphasense_driver_ros/cam5/dropped/debayered/slow");
+  success &= nodeHandle_.param<std::string>(
+      "subscribers/rgb_image_1_topic", rgb_image_1_topic,
+      "/alphasense_driver_ros/cam3/dropped/debayered/slow");
+  success &= nodeHandle_.param<std::string>(
+      "subscribers/rgb_image_2_topic", rgb_image_2_topic,
+      "/alphasense_driver_ros/cam4/dropped/debayered/slow");
+  success &= nodeHandle_.param<std::string>(
+      "subscribers/rgb_image_3_topic", rgb_image_3_topic,
+      "/alphasense_driver_ros/cam5/dropped/debayered/slow");
 
   // Camera info topics
-  success &= nodeHandle_.param<std::string>("subscribers/camera_info_1_topic", camera_info_1_topic, "/camera_utils/alphasense_cam3/cameraInfo");
-  success &= nodeHandle_.param<std::string>("subscribers/camera_info_2_topic", camera_info_2_topic, "/camera_utils/alphasense_cam4/cameraInfo");
-  success &= nodeHandle_.param<std::string>("subscribers/camera_info_3_topic", camera_info_3_topic, "/camera_utils/alphasense_cam5/cameraInfo");
+  success &= nodeHandle_.param<std::string>(
+      "subscribers/camera_info_1_topic", camera_info_1_topic,
+      "/camera_utils/alphasense_cam3/cameraInfo");
+  success &= nodeHandle_.param<std::string>(
+      "subscribers/camera_info_2_topic", camera_info_2_topic,
+      "/camera_utils/alphasense_cam4/cameraInfo");
+  success &= nodeHandle_.param<std::string>(
+      "subscribers/camera_info_3_topic", camera_info_3_topic,
+      "/camera_utils/alphasense_cam5/cameraInfo");
 
   success &= nodeHandle_.param<bool>("mesh", mesh_, true);
   success &= nodeHandle_.param<bool>("esdf", esdf_, true);
@@ -286,31 +372,37 @@ bool NvbloxNode::readParameters(){
   success &= nodeHandle_.param<float>("slice_height", slice_height_, 1.0f);
   success &= nodeHandle_.param<float>("min_height", min_height_, 0.0f);
   success &= nodeHandle_.param<float>("max_height", max_height_, 1.0f);
-  
-  success &= nodeHandle_.param<float>("max_tsdf_update_hz", max_tsdf_update_hz_, 10.0f);
-  success &= nodeHandle_.param<float>("max_color_update_hz", max_color_update_hz_, 5.0f);
-  success &= nodeHandle_.param<float>("max_mesh_update_hz", max_mesh_update_hz_, 5.0f);
-  success &= nodeHandle_.param<float>("max_esdf_update_hz", max_esdf_update_hz_, 2.0f);
+
+  success &= nodeHandle_.param<float>("max_tsdf_update_hz", max_tsdf_update_hz_,
+                                      10.0f);
+  success &= nodeHandle_.param<float>("max_color_update_hz",
+                                      max_color_update_hz_, 5.0f);
+  success &=
+      nodeHandle_.param<float>("max_mesh_update_hz", max_mesh_update_hz_, 5.0f);
+  success &=
+      nodeHandle_.param<float>("max_esdf_update_hz", max_esdf_update_hz_, 2.0f);
 
   int maxMeshingHeight{4};
-  success &= nodeHandle_.param<int>(nodeHandle_.getNamespace() +"/max_meshing_height", maxMeshingHeight, 4);
+  success &= nodeHandle_.param<int>(
+      nodeHandle_.getNamespace() + "/max_meshing_height", maxMeshingHeight, 4);
   converter_.maxHeight_ = std::move(maxMeshingHeight);
 
   return success;
 }
 
-void NvbloxNode::transformCallback(const geometry_msgs::TransformStampedConstPtr& transform_msg){
+void NvbloxNode::transformCallback(
+    const geometry_msgs::TransformStampedConstPtr& transform_msg) {
   transformer_.transformCallback(transform_msg);
 }
 
-void NvbloxNode::poseCallback(const geometry_msgs::PoseStampedConstPtr& transform_msg){
+void NvbloxNode::poseCallback(
+    const geometry_msgs::PoseStampedConstPtr& transform_msg) {
   transformer_.poseCallback(transform_msg);
 }
 
 void NvbloxNode::depthImageCallback(
-  const sensor_msgs::ImageConstPtr& depth_img_ptr,
-  const sensor_msgs::CameraInfoConstPtr& camera_info_msg)
-{
+    const sensor_msgs::ImageConstPtr& depth_img_ptr,
+    const sensor_msgs::CameraInfoConstPtr& camera_info_msg) {
   timing::Timer ros_total_timer("ros/total");
   // Cache clock_now.
   ros::Time clock_now = depth_img_ptr->header.stamp;
@@ -318,16 +410,17 @@ void NvbloxNode::depthImageCallback(
   ROS_DEBUG_STREAM("Depth image received. Image stamp:" << clock_now);
 
   if (max_tsdf_update_hz_ > 0.0f &&
-    (clock_now - last_tsdf_update_time_).toSec() <
-    1.0f / max_tsdf_update_hz_)
-  {
-    ROS_DEBUG_STREAM("Skipping integrating one depth measurement due to update rate.");
+      (clock_now - last_tsdf_update_time_).toSec() <
+          1.0f / max_tsdf_update_hz_) {
+    ROS_DEBUG_STREAM(
+        "Skipping integrating one depth measurement due to update rate.");
     // Skip integrating this.
     return;
   }
 
-  if(last_tsdf_update_time_ == clock_now){
-    ROS_DEBUG_STREAM("Message with same timestamp arrived skipping this message.");
+  if (last_tsdf_update_time_ == clock_now) {
+    ROS_DEBUG_STREAM(
+        "Message with same timestamp arrived skipping this message.");
     // Skip integrating this.
     return;
   }
@@ -340,19 +433,16 @@ void NvbloxNode::depthImageCallback(
 }
 
 void NvbloxNode::colorImageCallback(
-  const sensor_msgs::ImageConstPtr & color_image_ptr,
-  const sensor_msgs::CameraInfoConstPtr & camera_info_msg)
-{
+    const sensor_msgs::ImageConstPtr& color_image_ptr,
+    const sensor_msgs::CameraInfoConstPtr& camera_info_msg) {
   timing::Timer ros_total_timer("ros/total");
   // Cache clock_now.
   ros::Time clock_now = color_image_ptr->header.stamp;
   ROS_DEBUG_STREAM("RGB image received. Image stamp:" << clock_now);
 
-
   if (max_color_update_hz_ > 0.0f &&
-    (clock_now - last_color_update_time_).toSec() <
-    1.0f / max_color_update_hz_)
-  {
+      (clock_now - last_color_update_time_).toSec() <
+          1.0f / max_color_update_hz_) {
     ROS_DEBUG_STREAM("Skipping integrating one rgb image due to update rate.");
     // Skip integrating this.
     return;
@@ -364,8 +454,7 @@ void NvbloxNode::colorImageCallback(
   processColorQueue();
 }
 
-void NvbloxNode::processDepthQueue()
-{
+void NvbloxNode::processDepthQueue() {
   timing::Timer ros_tsdf_timer("ros/tsdf");
 
   auto it = depth_image_queue_.begin();
@@ -382,12 +471,13 @@ void NvbloxNode::processDepthQueue()
     // Get the TF for this image.
     Transform T_S_C;
 
-    std::string target_frame = (useHelperFrame_) ? (depth_img_ptr->header.frame_id + "_helper") : (depth_img_ptr->header.frame_id);
+    std::string target_frame =
+        (useHelperFrame_) ? (depth_img_ptr->header.frame_id + "_helper")
+                          : (depth_img_ptr->header.frame_id);
 
     // This transform either uses tf or provided transform.
     if (!transformer_.lookupTransformToGlobalFrame(
-        target_frame, depth_img_ptr->header.stamp, &T_S_C))
-    {
+            target_frame, depth_img_ptr->header.stamp, &T_S_C)) {
       ROS_ERROR("No tf transform available");
       continue;
     }
@@ -414,9 +504,8 @@ void NvbloxNode::processDepthQueue()
     if (esdf_) {
       // Check if it's been long enough since the last frame.
       if (max_esdf_update_hz_ <= 0.0f ||
-        (clock_now - last_esdf_update_time_).toSec() >=
-        1.0f / max_esdf_update_hz_)
-      {
+          (clock_now - last_esdf_update_time_).toSec() >=
+              1.0f / max_esdf_update_hz_) {
         last_esdf_update_time_ = clock_now;
 
         // Then do the update.
@@ -428,9 +517,8 @@ void NvbloxNode::processDepthQueue()
     // Mesh integrator
     if (mesh_) {
       if (max_mesh_update_hz_ <= 0.0f ||
-        (clock_now - last_mesh_update_time_).toSec() >=
-        1.0f / max_mesh_update_hz_)
-      {
+          (clock_now - last_mesh_update_time_).toSec() >=
+              1.0f / max_mesh_update_hz_) {
         last_mesh_update_time_ = clock_now;
         updateMesh(depth_img_ptr->header.stamp);
       }
@@ -451,8 +539,7 @@ void NvbloxNode::processDepthQueue()
   }
 }
 
-void NvbloxNode::processColorQueue()
-{
+void NvbloxNode::processColorQueue() {
   timing::Timer ros_color_timer("ros/color");
 
   auto it = color_image_queue_.begin();
@@ -466,12 +553,13 @@ void NvbloxNode::processColorQueue()
     timing::Timer transform_timer("ros/color/transform");
 
     // Get the TF for this image.
-    std::string target_frame = (useHelperFrame_) ? (color_image_ptr->header.frame_id + "_helper") : (color_image_ptr->header.frame_id);
+    std::string target_frame =
+        (useHelperFrame_) ? (color_image_ptr->header.frame_id + "_helper")
+                          : (color_image_ptr->header.frame_id);
     Transform T_S_C;
 
     if (!transformer_.lookupTransformToGlobalFrame(
-        target_frame, color_image_ptr->header.stamp, &T_S_C))
-    {
+            target_frame, color_image_ptr->header.stamp, &T_S_C)) {
       ROS_ERROR("No tf transform available");
       continue;
     }
@@ -484,9 +572,8 @@ void NvbloxNode::processColorQueue()
     Camera camera = converter_.cameraFromMessage(*camera_info_msg);
 
     // Convert the color image.
-    if (!converter_.colorImageFromImageMessage(
-        color_image_ptr,
-        &color_image_)){
+    if (!converter_.colorImageFromImageMessage(color_image_ptr,
+                                               &color_image_)) {
       ROS_ERROR("Failed to transform color image.");
       continue;
     }
@@ -512,8 +599,7 @@ void NvbloxNode::processColorQueue()
   }
 }
 
-void NvbloxNode::updateEsdf(const ros::Time & timestamp)
-{
+void NvbloxNode::updateEsdf(const ros::Time& timestamp) {
   timing::Timer ros_esdf_timer("ros/esdf");
 
   timing::Timer esdf_integration_timer("ros/esdf/integrate");
@@ -535,18 +621,15 @@ void NvbloxNode::updateEsdf(const ros::Time & timestamp)
     sensor_msgs::PointCloud2 pointcloud_msg;
 
     // AABB of a certain slice height.
-    AxisAlignedBoundingBox aabb(Vector3f(
-        std::numeric_limits<float>::lowest(),
-        std::numeric_limits<float>::lowest(),
-        slice_height_ - voxel_size_ / 2.0f),
-      Vector3f(
-        std::numeric_limits<float>::max(),
-        std::numeric_limits<float>::max(),
-        slice_height_ + voxel_size_ / 2.0f));
+    AxisAlignedBoundingBox aabb(Vector3f(std::numeric_limits<float>::lowest(),
+                                         std::numeric_limits<float>::lowest(),
+                                         slice_height_ - voxel_size_ / 2.0f),
+                                Vector3f(std::numeric_limits<float>::max(),
+                                         std::numeric_limits<float>::max(),
+                                         slice_height_ + voxel_size_ / 2.0f));
 
-    converter_.pointcloudFromLayerInAABB(
-      mapper_->esdf_layer(), aabb,
-      &pointcloud_msg);
+    converter_.pointcloudFromLayerInAABB(mapper_->esdf_layer(), aabb,
+                                         &pointcloud_msg);
 
     pointcloud_msg.header.frame_id = global_frame_;
     pointcloud_msg.header.stamp = timestamp;
@@ -561,17 +644,15 @@ void NvbloxNode::updateEsdf(const ros::Time & timestamp)
 
     nvblox_msgs::DistanceMapSlice map_slice;
 
-    converter_.distanceMapSliceFromLayer(
-      mapper_->esdf_layer(), slice_height_,
-      &map_slice);
+    converter_.distanceMapSliceFromLayer(mapper_->esdf_layer(), slice_height_,
+                                         &map_slice);
     map_slice.header.frame_id = global_frame_;
     map_slice.header.stamp = timestamp;
     map_slice_publisher_.publish(map_slice);
   }
 }
 
-void NvbloxNode::updateMesh(const ros::Time & timestamp)
-{
+void NvbloxNode::updateMesh(const ros::Time& timestamp) {
   timing::Timer ros_mesh_timer("ros/mesh");
 
   timing::Timer mesh_integration_timer("ros/mesh/integrate_and_color");
@@ -588,13 +669,12 @@ void NvbloxNode::updateMesh(const ros::Time & timestamp)
       ROS_INFO("Got a new subscriber, sending entire map.");
 
       converter_.meshMessageFromMeshBlocks(
-        mapper_->mesh_layer(), mapper_->mesh_layer().getAllBlockIndices(),
-        &mesh_msg);
+          mapper_->mesh_layer(), mapper_->mesh_layer().getAllBlockIndices(),
+          &mesh_msg);
       mesh_msg.clear = true;
     } else {
-      converter_.meshMessageFromMeshBlocks(
-        mapper_->mesh_layer(),
-        mesh_updated_list, &mesh_msg);
+      converter_.meshMessageFromMeshBlocks(mapper_->mesh_layer(),
+                                           mesh_updated_list, &mesh_msg);
     }
     mesh_msg.header.frame_id = global_frame_;
     mesh_msg.header.stamp = timestamp;
@@ -605,26 +685,32 @@ void NvbloxNode::updateMesh(const ros::Time & timestamp)
   mesh_output_timer.Stop();
 }
 
-void NvbloxNode::memoryTimerCallback(const ros::TimerEvent& /*event*/){
-
+void NvbloxNode::memoryTimerCallback(const ros::TimerEvent& /*event*/) {
   int start_free_gpu_memory_mb{0};
   std::tie(start_free_gpu_memory_mb, std::ignore) = getFreeGPUMemory();
 
-  ROS_DEBUG_STREAM("Timed Memory check. Free memory: " << start_free_gpu_memory_mb);
+  ROS_DEBUG_STREAM(
+      "Timed Memory check. Free memory: " << start_free_gpu_memory_mb);
 
   // Update the free memory holder if we have more available memory.
-  freeMemoryAfterLastSave = (start_free_gpu_memory_mb > freeMemoryAfterLastSave) ? start_free_gpu_memory_mb : freeMemoryAfterLastSave;
+  freeMemoryAfterLastSave = (start_free_gpu_memory_mb > freeMemoryAfterLastSave)
+                                ? start_free_gpu_memory_mb
+                                : freeMemoryAfterLastSave;
 
   // Check whether we have a big memory diff.
-  if(freeMemoryAfterLastSave - start_free_gpu_memory_mb > memoryPurgeThreshold_){
-
+  if (freeMemoryAfterLastSave - start_free_gpu_memory_mb >
+      memoryPurgeThreshold_) {
     // Generate mesh save path.
-    const std::string nameOfFile{"/" + std::to_string(mapSaveCounter_) + "_nvblox_mesh" + ".ply"};
+    const std::string nameOfFile{"/" + std::to_string(mapSaveCounter_) +
+                                 "_nvblox_mesh" + ".ply"};
 
     ROS_INFO_STREAM("Requested save folder:  " << output_dir_);
 
-    // Currently we are saving to /home/<user>/.ros/maps folder. User is automatically detected.
-    //const std::string topDirectoryPath{static_cast<std::string>(std::filesystem::current_path()) + "/maps"};
+    // Currently we are saving to /home/<user>/.ros/maps folder. User is
+    // automatically detected.
+    // const std::string
+    // topDirectoryPath{static_cast<std::string>(std::filesystem::current_path())
+    // + "/maps"};
 
     /*
     // First check and create the top level directory within ./ros folder.
@@ -635,17 +721,18 @@ void NvbloxNode::memoryTimerCallback(const ros::TimerEvent& /*event*/){
         return;
       }
       // Give permission to all to read, write and execute to the new directory.
-      std::filesystem::permissions(topDirectoryPath, std::filesystem::perms::all);
+      std::filesystem::permissions(topDirectoryPath,
+    std::filesystem::perms::all);
     }
     */
-    
+
     // Generate the file name itself.
     const std::string fileName{output_dir_ + "/" + nameOfFile};
 
     // Actual save.
     bool success = io::outputMeshLayerToPly(mapper_->mesh_layer(), fileName);
 
-    if(!success){
+    if (!success) {
       ROS_ERROR("Couldn't Save Mesh File.!");
       return;
     }
@@ -660,25 +747,28 @@ void NvbloxNode::memoryTimerCallback(const ros::TimerEvent& /*event*/){
     // Re-query memory
     std::tie(freeMemoryAfterLastSave, std::ignore) = getFreeGPUMemory();
 
-    ROS_INFO_STREAM("Nvblox: Saved a local mesh file named " << nameOfFile << ". Free Space from " << start_free_gpu_memory_mb << " MB to " << freeMemoryAfterLastSave << " MB." );
-
+    ROS_INFO_STREAM("Nvblox: Saved a local mesh file named "
+                    << nameOfFile << ". Free Space from "
+                    << start_free_gpu_memory_mb << " MB to "
+                    << freeMemoryAfterLastSave << " MB.");
   }
 }
 
-bool NvbloxNode::savePly(std_srvs::Empty::Request& /*request*/, std_srvs::Empty::Response& /*response*/)
-{
-
+bool NvbloxNode::savePly(std_srvs::Empty::Request& /*request*/,
+                         std_srvs::Empty::Response& /*response*/) {
   int start_free_gpu_memory_mb;
   std::tie(start_free_gpu_memory_mb, std::ignore) = getFreeGPUMemory();
 
   ROS_INFO_STREAM("Free Memory before save : " << start_free_gpu_memory_mb);
 
   // Commented out since jetpack version < 5.0 does not support c++17 utilities.
-  //const std::string topDirectoryPath{static_cast<std::string>(std::filesystem::current_path()) + "/maps"};
+  // const std::string
+  // topDirectoryPath{static_cast<std::string>(std::filesystem::current_path())
+  // +
+  // "/maps"};
 
-  io::outputMeshLayerToPly(
-    mapper_->mesh_layer(),
-    output_dir_ + "/manual_mesh_nvblox.ply");
+  io::outputMeshLayerToPly(mapper_->mesh_layer(),
+                           output_dir_ + "/manual_mesh_nvblox.ply");
   ROS_INFO_STREAM("Output PLY files to " << output_dir_);
 
   mapper_->mesh_layer().clear();
@@ -705,8 +795,7 @@ std::pair<int, float> NvbloxNode::getFreeGPUMemory() {
 
 }  // namespace nvblox
 
-int main(int argc, char * argv[])
-{
+int main(int argc, char* argv[]) {
   google::InitGoogleLogging(argv[0]);
   FLAGS_alsologtostderr = true;
   google::InstallFailureSignalHandler();

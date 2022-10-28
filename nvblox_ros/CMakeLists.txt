@@ -36,11 +36,6 @@ if(NOT WIN32)
   set(Magenta     "${Esc}[35m")
 endif()
 
-message("${Magenta}INFO: ${CMAKE_MODULE_PATH}.${ColourReset}")
-message("${Magenta}INFO: ${CMAKE_PREFIX_PATH}.${ColourReset}")
-message("${Magenta}INFO: ${CMAKE_FIND_ROOT_PATH}.${ColourReset}")
-message("${Magenta}INFO: ${CMAKE_INCLUDE_PATH}.${ColourReset}")
-
 find_package (Eigen3 3.3.7 REQUIRED NO_MODULE)
 find_package(OpenCV REQUIRED)
 find_package(catkin REQUIRED COMPONENTS
@@ -106,6 +101,14 @@ set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} --compiler-options -fPIC")
 add_subdirectory(${NVBLOX_DIR} nvblox)
 
 include_directories(AFTER include ${catkin_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS})
+include_directories(${NVBLOX_DIR}/include
+                    ${NVBLOX_DIR}/executables/include 
+                    ${NVBLOX_DIR}/experiments/include)
+
+message("${Magenta}INFO: ${CMAKE_MODULE_PATH}.${ColourReset}")
+message("${Magenta}INFO: ${CMAKE_PREFIX_PATH}.${ColourReset}")
+message("${Magenta}INFO: ${CMAKE_FIND_ROOT_PATH}.${ColourReset}")
+message("${Magenta}INFO: ${CMAKE_INCLUDE_PATH}.${ColourReset}")
 
 #############
 # LIBRARIES #
