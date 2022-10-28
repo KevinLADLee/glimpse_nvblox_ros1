@@ -1,4 +1,7 @@
 [submodule "nvblox"]
-	path = nvblox
-	url = https://github.com/nvidia-isaac/nvblox.git
-	branch = isaac_ros
+#	path = nvblox
+#	url = https://github.com/nvidia-isaac/nvblox.git
+#	branch = isaac_ros
+       path = nvblox
+	url = http://gitlab.ram-lab.com/ramlab_dataset_sensor/mapping_codebase/nvblox.git
+	branch = nvblox_dev
