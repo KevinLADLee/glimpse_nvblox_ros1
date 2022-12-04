@@ -224,7 +224,6 @@ struct DivideBy1000 : public thrust::unary_function<uint16_t, float> {
   }
 };
 
-// TODO(jjiao):
 // Convert image to depth frame object
 bool RosConverter::depthImageFromImageMessage(
     const sensor_msgs::ImageConstPtr& image_msg, DepthImage* depth_image) {
