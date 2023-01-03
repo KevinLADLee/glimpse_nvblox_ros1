@@ -142,10 +142,14 @@ target_include_directories(nvblox_node SYSTEM PUBLIC
 )
 
 # 3dmatch_node
-add_executable(nvblox_3dmatch_node src/3dmatch_node.cpp)
+add_executable(nvblox_3dmatch_node src/3dmatch_node.cpp
+        ${NVBLOX_DIR}/executables/src/datasets/3dmatch.cpp
+        ${NVBLOX_DIR}/executables/src/fuser_rgbd.cpp
+        )
 target_link_libraries(nvblox_3dmatch_node ${PROJECT_NAME}_lib)
 add_dependencies(nvblox_3dmatch_node ${catkin_EXPORTED_TARGETS})
 target_include_directories(nvblox_3dmatch_node SYSTEM PUBLIC
+  include
   ${catkin_INCLUDE_DIRS}
 )
 

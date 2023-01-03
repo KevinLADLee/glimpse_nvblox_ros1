@@ -92,7 +92,7 @@ set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} --compiler-options -fPIC")
 ##########
 # NVBLOX #
 ##########
-add_subdirectory(${NVBLOX_DIR} nvblox)
+#add_subdirectory(${NVBLOX_DIR} nvblox)
 
 include_directories(AFTER include ${catkin_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS})
 include_directories(${NVBLOX_DIR}/include
